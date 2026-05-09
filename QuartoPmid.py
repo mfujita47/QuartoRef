@@ -9,7 +9,7 @@ Description:
 """
 from __future__ import annotations
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 import argparse
 import concurrent.futures
@@ -48,11 +48,8 @@ PMID = str
 # ==========================================
 @dataclass(frozen=True)
 class Settings:
-    # --- 実行モードのデフォルト設定 ---
-    update_yaml: bool = True   # Trueにすると、常にYAMLへの自動追記を行います
-    download_csl: bool = True  # Trueにすると、YAMLに記載されたCSLスタイルを自動ダウンロードします
-
-    # --- API 通信設定 ---
+    update_yaml: bool = True
+    download_csl: bool = True
     api_base_url: str = "https://pmc.ncbi.nlm.nih.gov/api/ctxp/v1/pubmed/"
     api_key: str | None = field(default_factory=lambda: os.getenv("NCBI_API_KEY"))
     api_timeout: float = 20.0
@@ -343,9 +340,12 @@ def main() -> int:
         return 0
 
     bak_path = in_path.with_suffix(in_path.suffix + ".bak")
-    shutil.copy2(in_path, bak_path)
+    if not bak_path.exists() or bak_path.read_text(encoding="utf-8") != original_text:
+        shutil.copy2(in_path, bak_path)
+        print(f"✓ Backup created: {bak_path.name}")
+
     in_path.write_text(processed_text, encoding="utf-8")
-    print(f"✓ Overwrote original file. Backup created: {bak_path.name}")
+    print(f"✓ Overwrote original file: {in_path.name}")
 
     return 0
 
