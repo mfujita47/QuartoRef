@@ -1,0 +1,12 @@
+# Python caches
+__pycache__/
+*.pyc
+
+# Backups
+backups/
+
+# Tests
+tests/
+
+# VS Code / Workspace
+*.code-workspace
