@@ -1,4 +1,4 @@
-# 📘 QuartoPmid (v1.0.0)
+# 📘 QuartoPmid (v1.1.0)
 
 **QuartoPmid** は、Quarto (`.qmd`) や Markdown 原稿内の PubMed ID (PMID) を自動整理し、PubMed API から最新の書誌情報を取得して CSL-JSON を生成する、Quarto ユーザーに特化した軽量な CLI ツールです。
 
