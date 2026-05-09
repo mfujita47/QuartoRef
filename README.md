@@ -8,18 +8,19 @@
 
 **QuartoPmid** is a lightweight CLI tool designed for [Quarto](https://quarto.org/) users. It automatically organizes [PubMed](https://pubmed.ncbi.nlm.nih.gov/) IDs (PMIDs) in your manuscripts (`.qmd` or `.md`), fetches the latest bibliographic metadata via the [PubMed API](https://www.ncbi.nlm.nih.gov/home/develop/api/), and generates [CSL-JSON](https://citeproc-js.readthedocs.io/en/latest/csl-json/markup.html) files.
 
-It focuses strictly on "**Automating PubMed citation management**," providing a simple, fast, and seamless experience by decoupling rendering and file conversion features from its predecessor, [PyRefPmid](https://github.com/mfujita47/PyRefPmid).
+It focuses strictly on "**Automating PubMed citation management**," providing a simple and fast experience by decoupling redundant features from its predecessor, [PyRefPmid](https://github.com/mfujita47/PyRefPmid).
 
 ### ✨ Key Features
 
 - **Automatic Citation Normalization**: Detects [Quarto-standard](https://quarto.org/docs/authoring/footnotes-and-citations.html) `[@PMID]` tags and intelligently merges consecutive tags (e.g., `[@123] [@456]` becomes `[@123; @456]`).
-- **PubMed Data Sync**: Fetches metadata from the [PubMed API](https://www.ncbi.nlm.nih.gov/home/develop/api/) and saves it in the [CSL-JSON](https://citeproc-js.readthedocs.io/en/latest/csl-json/markup.html) format required by Quarto.
+- **PubMed Data Sync**: Fetches metadata from the [PubMed API](https://www.ncbi.nlm.nih.gov/home/develop/api/) and saves it in the [CSL-JSON](https://citeproc-js.readthedocs.io/en/latest/csl-json/markup.html) format required by [Quarto](https://quarto.org/).
 - **Smart YAML Update**: Automatically manages the `bibliography` field in your YAML front matter without breaking existing comments or formatting.
+- **Standalone & Portable**: Operates as a single-file script. No complex setup or package installation required—just copy `QuartoPmid.py` to your project.
 - **Auto Setup**: Automatically downloads [CSL](https://citationstyles.org/) styles, implements high-speed caching, and creates backups before execution.
 
 ### 📦 Installation
 
-Requires [Python](https://www.python.org/) 3.9 or higher. Install the required libraries:
+The tool is a single Python script. Requires [Python](https://www.python.org/) 3.9 or higher. **Please install the necessary external libraries before use:**
 
 ```bash
 pip install requests ruamel.yaml
@@ -46,7 +47,7 @@ After execution, verify that `test_draft.json` is generated and the tags in `tes
 
 #### PMID Syntax
 
-Use the `[@PMID]` format for PubMed IDs:
+Use the `[@PMID]` format for [PubMed](https://pubmed.ncbi.nlm.nih.gov/) IDs:
 
 - Single citation: `[@12345678]`
 - Multiple citations: `[@12345678] [@87654321]` (automatically merged to `[@12345678; @87654321]`)
@@ -97,11 +98,12 @@ class Settings:
 - **引用タグの自動正規化**: [Quarto 標準記法](https://quarto.org/docs/authoring/footnotes-and-citations.html)である `[@PMID]` を検出し、連続するタグを `[@12345678; @87654321]` 形式へスマートに統合します。
 - **PubMed データの自動同期**: [PubMed API](https://www.ncbi.nlm.nih.gov/home/develop/api/) から最新の書誌情報を取得し、[Quarto](https://quarto.org/) 標準の [CSL-JSON](https://citeproc-js.readthedocs.io/en/latest/csl-json/markup.html) 形式で保存します。
 - **YAML 設定のスマートな自動更新**: 原稿内の `bibliography` 設定をツールが自動で管理。既存のコメントや書式を壊さずに更新します。
+- **スタンドアロン・ポータブル**: 単一のスクリプトファイルとして動作します。複雑な導入作業は不要で、`QuartoPmid.py` をプロジェクトにコピーするだけで利用可能です。
 - **不足ファイルの自動セットアップ**: [CSL](https://citationstyles.org/) スタイルの自動取得、キャッシュ機能、実行前の自動バックアップなど、面倒な準備をすべて自動化します。
 
 ### 📦 インストール
 
-[Python](https://www.python.org/) 3.9 以上が必要です。
+本ツールは単一の Python スクリプトとして提供されます。[Python](https://www.python.org/) 3.9 以上が必要です。**実行には以下の外部ライブラリが必要ですので、事前にインストールしてください。**
 
 ```bash
 pip install requests ruamel.yaml
