@@ -1,40 +1,40 @@
-# 変更履歴 (Changelog)
+# Changelog
 
-このプロジェクトのすべての注目すべき変更はこのファイルに記録されます。
+All notable changes to this project will be documented in this file.
 
-フォーマットは [Keep a Changelog](https://keepachangelog.com/ja/1.0.0/) に基づいており、
-このプロジェクトは [セマンティック・バージョニング](https://semver.org/lang/ja/) に準拠しています。
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.1.0] - 2026-05-09
 
-### 追加 (Added)
+### Added
 
-- **CSL自動ダウンロード機能の復活**: YAMLフロントマターの `csl:` フィールドを解析し、ローカルに存在しない場合に CSL 公式リポジトリから自動的にダウンロードする機能を再実装。
-- **GUIダイアログのフォールバック対応**: TTY（インタラクティブシェル）が利用できない環境や、明示的にGUIを求めた場合に `tkinter` を使用したファイル選択ダイアログを表示する機能を復元。
-- **CLIオプションの拡張**: `--download-csl` / `--no-download-csl` 引数を追加し、自動ダウンロードのオンオフを制御可能に。
+- **Automatic CSL Download**: Restored the ability to parse the `csl:` field in YAML front matter and automatically download the CSL file from the official repository if it's missing locally.
+- **GUI Dialog Fallback**: Restored the file selection dialog using `tkinter` for environments where TTY (interactive shell) is unavailable or when explicitly requested.
+- **Extended CLI Options**: Added `--download-csl` / `--no-download-csl` flags to control the automatic CSL download behavior.
 
-### 修正 (Fixed)
+### Fixed
 
-- **依存ライブラリチェックの改善**: `requests`, `ruamel.yaml` のインポートエラー時により分かりやすい案内を表示するように修正。
-- **PMID抽出ロジックの安定化**: 正規表現の微調整による堅牢性の向上。
+- **Improved Dependency Checks**: Added clearer instructions when `requests` or `ruamel.yaml` are missing.
+- **Robust PMID Extraction**: Fine-tuned the regex logic for more reliable PMID detection and extraction.
 
 ## [1.0.0] - 2026-05-09
 
-### 追加 (Added)
+### Added
 
-- **Quartoネイティブ対応**: Quartoの標準記法 `[@123456]` に完全対応。連続するタグ `[@123] [@456]` のスマート結合機能を実装。
-- **YAMLフロントマター自動追記 (`--update-yaml`)**: 原稿の既存のコメントやフォーマットを破壊することなく、生成されたJSONファイルを `bibliography:` に安全に追記・マージする機能を実装（`ruamel.yaml` を採用）。
-- **安全な上書き処理**: 原稿を直接更新する際、自動的に `.bak` バックアップを作成する機能を追加。
-- **冪等性（べきとうせい）の確保**: 原稿に変更がない場合、無駄なファイル書き込み（タイムスタンプの更新）をスキップするロジックを導入。
+- **Quarto Native Support**: Fully supports the standard Quarto citation syntax `[@123456]`. Implemented smart merging for consecutive tags like `[@123] [@456]` into `[@123; @456]`.
+- **Automatic YAML Update (`--update-yaml`)**: Safely appends or merges the generated JSON file into the `bibliography:` field without breaking existing comments or formatting (using `ruamel.yaml`).
+- **Safe Overwriting**: Automatically creates a `.bak` backup before modifying the original manuscript.
+- **Idempotency**: Skips file writes if no changes are detected in the document.
 
-### 変更 (Changed)
+### Changed
 
-- **リポジトリの独立とスコープの明確化**: `PyRefPmid` から Quarto 向けに分岐し、独立したツール `QuartoPmid` としてリニューアル。
-- **CSL / Pandoc 依存の排除**: スタイリングとレンダリングの責務を Quarto に完全委譲。ツールの単一責任原則（SRP）を徹底し、大幅な軽量化を実現。
-- **CLIの刷新**: CUI/CLI ツールとしての使い勝手を向上させるため、不要な GUI ダイアログ機能を廃止。
+- **Independent Repository & Scope Refinement**: Forked from `PyRefPmid` and rebranded as `QuartoPmid`, focusing exclusively on Quarto workflows.
+- **Removed CSL/Pandoc Dependencies**: Delegated styling and rendering responsibilities entirely to Quarto. Adhered to the Single Responsibility Principle (SRP), resulting in a much lighter tool.
+- **Revamped CLI**: Improved the Command Line Interface for better usability, removing unnecessary GUI elements from the core flow.
 
-### 削除 (Removed)
+### Removed
 
-- 過去のレガシー記法（`[pmid: 123]` 等）のサポートを廃止（Quarto標準記法のみにフォーカス）。
-- CSLスタイルの自動ダウンロード機能を削除（Quarto側で管理するため）。
-- Pandocの自動実行プロセスを削除。
+- Dropped support for legacy citation formats (e.g., `[pmid: 123]`) to focus on Quarto standards.
+- Removed automatic CSL downloading (initially removed in 1.0.0, then restored in 1.1.0 with better control).
+- Removed the automatic Pandoc execution process.
