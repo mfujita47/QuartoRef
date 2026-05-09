@@ -179,7 +179,7 @@ def normalize_markdown(text: str) -> tuple[str, set[PMID]]:
         pmids = RE_PMID_EXTRACT.findall(match.group(0))
         seen = set()
         unique_pmids = [p for p in pmids if not (p in seen or seen.add(p))]
-        return f"[@{'; @'.join(unique_pmids)}]"
+        return f"[@{';@'.join(unique_pmids)}]"
     text = RE_CONSECUTIVE.sub(merge_tags, text)
 
     pmids = set(RE_PMID_EXTRACT.findall(text))

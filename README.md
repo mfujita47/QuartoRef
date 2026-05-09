@@ -1,75 +1,76 @@
 # 📘 QuartoPmid (v1.1.0)
 
-**QuartoPmid** は、Quarto (`.qmd`) や Markdown 原稿内の PubMed ID (PMID) を自動整理し、PubMed API から最新の書誌情報を取得して CSL-JSON を生成する、Quarto ユーザーに特化した軽量な CLI ツールです。
+**QuartoPmid** は、[Quarto](https://quarto.org/) (`.qmd`) や [Markdown](https://daringfireball.net/projects/markdown/) (`.md`) 原稿内の [PubMed](https://pubmed.ncbi.nlm.nih.gov/) ID (PMID) を自動整理し、[PubMed API](https://www.ncbi.nlm.nih.gov/home/develop/api/) から最新の書誌情報を取得して [CSL](https://citationstyles.org/)-[JSON](https://www.json.org/) を生成する、[Quarto](https://quarto.org/) ユーザーに特化した軽量な CLI ツールです。
 
-旧 `PyRefPmid` からレンダリングやファイル変換の機能を切り離し、「**Quarto のネイティブな引用システムへの橋渡し**」に完全に特化させたことで、より堅牢で高速な動作を実現しました。
-
----
+旧 [PyRefPmid](https://github.com/mfujita47/PyRefPmid) からレンダリングやファイル変換の機能を切り離し、「**[PubMed](https://pubmed.ncbi.nlm.nih.gov/)  文献の取得と管理の自動化**」に機能を絞り込んだことで、よりシンプルで迷いのない操作感と高速な動作を実現しました。
 
 ## ✨ 主な機能
 
-- **Quarto 標準記法への完全対応**: `[@123456]` 形式の引用タグを検出。
-- **スマート・タグ統合**: 連続する引用タグ `[@123] [@456]` を、見やすく `[@123; @456]` に自動結合。
-- **YAML フロントマターの安全な同期**: 
-  - 生成された JSON ファイルを YAML の `bibliography` フィールドに自動追記。
-  - `ruamel.yaml` を採用し、YAML 内の既存のコメントやフォーマットを一切壊さずに更新します。
-- **CSL スタイルの自動取得**: 
-  - YAML に記載された `csl: nature.csl` などの指定を読み取り、ローカルにファイルがなければ公式リポジトリから自動ダウンロードします。
-- **冪等性（べきとうせい）の確保**: 
-  - API 通信のローカルキャッシュと、原稿に変更がない場合の書き込みスキップ機能により、何度実行しても安全かつ瞬時に終了します。
-- **安全な自動バックアップ**: 原稿を直接上書き更新する仕様ですが、実行前には常に `.bak` バックアップが作成されるため安全です。
-
----
+- **引用タグの自動正規化**: [Quarto 標準記法](https://quarto.org/docs/authoring/footnotes-and-citations.html)である `[@PMID]` を検出し、連続するタグを `[@12345678; @87654321]` 形式へスマートに統合します。
+- **[PubMed](https://pubmed.ncbi.nlm.nih.gov/) データの自動同期**: [PubMed API](https://www.ncbi.nlm.nih.gov/home/develop/api/) から最新の書誌情報を取得し、[Quarto](https://quarto.org/) 標準の [CSL](https://citationstyles.org/)-[JSON](https://www.json.org/) 形式で保存します。
+- **[YAML](https://yaml.org/) 設定のスマートな自動更新**: 原稿内の `bibliography` 設定をツールが自動で管理。既存のコメントや書式を壊さずに更新します。
+- **不足ファイルの自動セットアップ**: [CSL](https://citationstyles.org/) スタイルの自動取得、高速なキャッシュ、実行前の自動バックアップなど、面倒な準備をすべて自動化します。
 
 ## 📦 インストール
 
-Python 3.9 以上が必要です。以下のライブラリをインストールしてください。
+[Python](https://www.python.org/) 3.9 以上が必要です。以下のライブラリをインストールしてください。
 
 ```bash
 pip install requests ruamel.yaml
-
 ```
 
-> **🔑 APIキーの設定 (推奨):**
-> 大量の文献を一括処理する場合は、環境変数 `NCBI_API_KEY` に PubMed の API キーを設定しておくと、制限が緩和され（3回/秒 → 9回/秒）高速に動作します。
+## ⚙️ 設定 (Optional)
 
----
+### API キーの設定
+
+大量の文献を一括処理する場合は、環境変数 `NCBI_API_KEY` に [PubMed](https://pubmed.ncbi.nlm.nih.gov/) の [API キー](https://www.ncbi.nlm.nih.gov/account/settings/)を設定しておくと、制限が緩和され（3回/秒 → 9回/秒）高速に動作します。
+
+また、実行時に直接 `--api-key` オプションで渡すことも可能です（環境変数より優先されます）。
 
 ## 🚀 使い方
 
-基本の実行（カレントディレクトリに複数のファイルがある場合はメニューが表示されます）：
+基本の実行（引数なしで実行すると、カレントディレクトリのファイルをリストアップし、メニューから選択できます）：
 
 ```bash
 python QuartoPmid.py
-
 ```
+
+### テスト実行
+
+同梱されている [test_draft.md](./test_draft.md) を使用して、動作をすぐに試すことができます。
+
+```bash
+# テストファイルに対して実行
+python QuartoPmid.py test_draft.md
+```
+
+実行後、`test_draft.json` が生成され、`test_draft.md` 内のタグが整理されていることを確認してください。
+
+### 指定方法と PMID 記法
+
+原稿内では `[@PMID]` という形式で [PubMed](https://pubmed.ncbi.nlm.nih.gov/) ID を記述します。
+
+- 単一の引用: `[@12345678]`
+- 複数の引用: `[@12345678] [@87654321]` （実行後に `[@12345678; @87654321]` へ自動統合されます）
 
 ### 実践的なオプション
 
-**1. YAML 連携と自動更新 (`--update-yaml`)**
-原稿を直接更新（常に自動バックアップ作成）し、同時に YAML へ文献リストを自動登録します。
+オプションを指定しないデフォルトの状態では、**[YAML](https://yaml.org/) への追記**と **[CSL](https://citationstyles.org/) の自動取得**の両方が有効になっています。
+
+| オプション          | 説明                                                       | デフォルト       |
+| :------------------ | :--------------------------------------------------------- | :--------------- |
+| `input_file`        | 対象の `.qmd` または `.md` ファイルを指定します。          | (メニュー選択)   |
+| `--update-yaml`     | 生成した [JSON](https://www.json.org/) を [YAML](https://yaml.org/) の `bibliography` に自動登録します。 | **ON**           |
+| `--no-update-yaml`  | [YAML](https://yaml.org/) の自動更新を無効にします。                            | -                |
+| `--download-csl`    | YAML に記載された [CSL](https://citationstyles.org/) スタイルを自動取得します。           | **ON**           |
+| `--no-download-csl` | [CSL](https://citationstyles.org/) の自動取得を無効にします。                             | -                |
+| `--api-key KEY`     | [NCBI API キー](https://www.ncbi.nlm.nih.gov/account/settings/)を直接指定します。                            | (環境変数を使用) |
+
+**例: 特定のファイルに対し、[YAML](https://yaml.org/) 更新なしで実行する場合**
 
 ```bash
-python QuartoPmid.py draft.qmd --update-yaml
-
+python QuartoPmid.py draft.qmd --no-update-yaml
 ```
-
-**2. CSL スタイルの自動準備 (`--download-csl`)**
-YAML に書かれたスタイルファイルを自動的に GitHub から取得します。
-
-```bash
-python QuartoPmid.py draft.qmd --download-csl
-
-```
-
-**3. 全自動ワークフロー (おすすめ)**
-
-```bash
-python QuartoPmid.py draft.qmd --update-yaml --download-csl
-
-```
-
----
 
 ## 🛠️ カスタマイズ (Settings クラス)
 
@@ -80,24 +81,19 @@ python QuartoPmid.py draft.qmd --update-yaml --download-csl
 class Settings:
     update_yaml: bool = True   # 常にYAML更新をONにする
     download_csl: bool = True  # 常にCSLダウンロードをONにする
-
+    api_key: str = "your_api_key_here"  # APIキーを直接記載する場合
 ```
-
----
 
 ## 💡 Quarto でのレンダリング
 
-QuartoPmid で準備が整った後は、通常の Quarto コマンドで PDF や HTML を生成するだけです。
+[QuartoPmid](https://github.com/mfujita47/QuartoPmid) で準備が整った後は、通常の [Quarto](https://quarto.org/) コマンド、あるいは [VSCode](https://code.visualstudio.com/) の [Quarto 拡張機能](https://marketplace.visualstudio.com/items?itemName=quarto.quarto)（Render ボタンやショートカット）で PDF や HTML を生成するだけです。
 
 ```bash
-# 例: PDFへのレンダリング
+# 例: CLIでのPDFレンダリング
 quarto render draft.qmd --to pdf
-
 ```
-
----
 
 ## 🧑‍💻 作者 / ライセンス
 
-* **Author**: mfujita47 (Mitsugu Fujita)
-* **License**: [MIT License](https://www.google.com/search?q=LICENSE)
+- **Author**: [mfujita47](https://github.com/mfujita47) (Mitsugu Fujita)
+- **License**: [MIT License](https://opensource.org/licenses/MIT)
