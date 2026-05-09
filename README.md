@@ -19,13 +19,6 @@
 pip install requests ruamel.yaml
 ```
 
-## ⚙️ 設定 (Optional)
-
-### API キーの設定
-
-大量の文献を一括処理する場合は、環境変数 `NCBI_API_KEY` に [PubMed](https://pubmed.ncbi.nlm.nih.gov/) の [API キー](https://www.ncbi.nlm.nih.gov/account/settings/)を設定しておくと、制限が緩和され（3回/秒 → 9回/秒）高速に動作します。
-
-また、実行時に直接 `--api-key` オプションで渡すことも可能です（環境変数より優先されます）。
 
 ## 🚀 使い方
 
@@ -72,9 +65,21 @@ python QuartoPmid.py test_draft.md
 python QuartoPmid.py draft.qmd --no-update-yaml
 ```
 
-## 🛠️ カスタマイズ (Settings クラス)
+## ⚙️ 設定とカスタマイズ
 
-スクリプト上部の `Settings` データクラスを書き換えることで、自分の執筆スタイルに合わせてデフォルトの挙動（常に上書きする、常に YAML を更新するなど）を固定できます。
+### 1. API キーの設定
+
+大量の文献を一括処理する場合は、[PubMed](https://pubmed.ncbi.nlm.nih.gov/) の [API キー](https://www.ncbi.nlm.nih.gov/account/settings/)を設定することで、処理速度が大幅に向上します（3回/秒 → 9回/秒）。設定方法は以下の 3 通りです。
+
+| 方法 | 手順 |
+| :--- | :--- |
+| **環境変数** | `NCBI_API_KEY` にキーを設定（推奨）。 |
+| **CLI オプション** | 実行時に `--api-key YOUR_KEY` を付与。 |
+| **スクリプト編集** | 下記の `Settings` クラスの `api_key` を直接書き換え。 |
+
+### 2. デフォルト挙動の変更 (Settings クラス)
+
+スクリプト上部の `Settings` データクラスを書き換えることで、自分の執筆スタイルに合わせてデフォルトの挙動を固定できます。
 
 ```python
 @dataclass(frozen=True)
