@@ -30,7 +30,7 @@ pip install requests ruamel.yaml
 
 ### 🚀 Usage
 
-Basic execution (running without arguments lists files in the current directory for selection):
+No options required by default. Just run the script to select a file:
 
 ```bash
 python QuartoPmid.py
@@ -52,7 +52,7 @@ After execution, verify that `test_draft.json` is generated and the tags in `tes
 Use the `[@PMID]` format for [PubMed](https://pubmed.ncbi.nlm.nih.gov/) IDs:
 
 - Single citation: `[@12345678]`
-- Multiple citations: `[@12345678] [@87654321]` (automatically merged to `[@12345678; @87654321]`)
+- Multiple citations: `[@12345678; @87654321]` or `[@12345678] [@87654321]` (the latter is automatically merged)
 
 ### CLI Options
 
@@ -125,7 +125,7 @@ pip install requests ruamel.yaml
 
 ### 🚀 使い方
 
-基本の実行（引数なしで実行すると、カレントディレクトリのファイルをリストアップし、メニューから選択できます）：
+オプション指定なしで利用可能です。実行するとファイル選択メニューが表示されます：
 
 ```bash
 python QuartoPmid.py
@@ -144,9 +144,9 @@ python QuartoPmid.py test_draft.md
 原稿内では `[@PMID]` という形式で [PubMed](https://pubmed.ncbi.nlm.nih.gov/) ID を記述します。
 
 - 単一の引用: `[@12345678]`
-- 複数の引用: `[@12345678] [@87654321]` （実行後に `[@12345678; @87654321]` へ自動統合されます）
+- 複数の引用: `[@12345678; @87654321]` または `[@12345678] [@87654321]` （後者は実行後に自動統合されます）
 
-### 実践的なオプション
+### コマンドラインオプション
 
 | オプション          | 説明                                                                                | デフォルト       |
 | :------------------ | :---------------------------------------------------------------------------------- | :--------------- |
