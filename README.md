@@ -16,7 +16,7 @@ It focuses strictly on "**Automating PubMed citation management**," providing a 
 - **PubMed Data Sync**: Fetches metadata from the [PubMed API](https://www.ncbi.nlm.nih.gov/home/develop/api/) and saves it in the [CSL-JSON](https://citeproc-js.readthedocs.io/en/latest/csl-json/markup.html) format required by [Quarto](https://quarto.org/).
 - **Smart YAML Update**: Automatically manages the `bibliography` field in your YAML front matter without breaking existing comments or formatting.
 - **Standalone & Portable**: Operates as a single-file script. No complex setup or package installation required—just copy `QuartoPmid.py` to your project.
-- **Auto Setup**: Automatically downloads [CSL](https://citationstyles.org/) styles, implements high-speed caching, and creates backups before execution.
+- **Automatic Setup**: Automatically downloads [CSL](https://citationstyles.org/) styles, implements high-speed caching, and creates backups before execution.
 
 ### 📦 Installation
 
@@ -95,9 +95,9 @@ class Settings:
 
 ### ✨ 主な機能
 
-- **引用タグの自動正規化**: [Quarto 標準記法](https://quarto.org/docs/authoring/footnotes-and-citations.html)である `[@PMID]` を検出し、連続するタグを `[@12345678; @87654321]` 形式へスマートに統合します。
+- **引用タグの自動正規化**: [Quarto 標準記法](https://quarto.org/docs/authoring/footnotes-and-citations.html)である `[@PMID]` 引用タグを検出し、連続するタグを `[@12345678; @87654321]` 形式へスマートに統合します。
 - **PubMed データの自動同期**: [PubMed API](https://www.ncbi.nlm.nih.gov/home/develop/api/) から最新の書誌情報を取得し、[Quarto](https://quarto.org/) 標準の [CSL-JSON](https://citeproc-js.readthedocs.io/en/latest/csl-json/markup.html) 形式で保存します。
-- **YAML 設定のスマートな自動更新**: 原稿内の `bibliography` 設定をツールが自動で管理。既存のコメントや書式を壊さずに更新します。
+- **YAML フロントマターのスマートな自動更新**: 原稿内の `bibliography` 設定をツールが自動で管理。既存のコメントや書式を壊さずに更新します。
 - **スタンドアロン・ポータブル**: 単一のスクリプトファイルとして動作します。複雑な導入作業は不要で、`QuartoPmid.py` をプロジェクトにコピーするだけで利用可能です。
 - **不足ファイルの自動セットアップ**: [CSL](https://citationstyles.org/) スタイルの自動取得、キャッシュ機能、実行前の自動バックアップなど、面倒な準備をすべて自動化します。
 
@@ -136,7 +136,7 @@ python QuartoPmid.py test_draft.md
 
 | オプション          | 説明                                                                                | デフォルト       |
 | :------------------ | :---------------------------------------------------------------------------------- | :--------------- |
-| `input_file`        | 対象の `.qmd` または `.md` ファイルを指定します。                                   | (メニュー選択)   |
+| `input_file`        | 対象の原稿ファイル (`.qmd` / `.md`) を指定します。                                  | (メニュー選択)   |
 | `--update-yaml`     | 生成した [JSON](https://www.json.org/) を YAML の `bibliography` に自動登録します。 | **ON**           |
 | `--no-update-yaml`  | YAML の自動更新を無効にします。                                                     | -                |
 | `--download-csl`    | YAML に記載された [CSL](https://citationstyles.org/) スタイルを自動取得します。     | **ON**           |
