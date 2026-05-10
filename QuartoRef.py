@@ -55,9 +55,9 @@ CSL_STR_FIELDS = ["ISSN", "ISBN", "container-title", "container-title-short", "p
 
 # Pandoc/Quarto がサポートする標準的な CSL-JSON フィールド
 STANDARD_FIELDS = {
-    "id", "type", "title", "author", "issued", "container-title", 
-    "container-title-short", "volume", "issue", "page", "DOI", "PMID", 
-    "URL", "ISSN", "ISBN", "publisher", "abstract", "page-first", 
+    "id", "type", "title", "author", "issued", "container-title",
+    "container-title-short", "volume", "issue", "page", "DOI", "PMID",
+    "URL", "ISSN", "ISBN", "publisher", "abstract", "page-first",
     "journal-abbreviation", "language", "accessed"
 }
 
@@ -115,44 +115,27 @@ class ArticleMetadata:
         return self.error is None and bool(self.csl_data)
 
     def to_csl_json(self) -> dict[str, Any]:
-        """CSL-JSON形式のデータを正規化して、Pandoc互換の標準フィールドのみを返す"""
-        return _clean_csl_item(
-            self.csl_data or {}, 
-            self.full_id, 
-            error_msg=self.error,
-            raw_id=self.raw_id,
-            prefix=self.prefix
-        )
-
-def _normalize_csl_fields(csl_dict: dict) -> dict:
-    """CSL-JSON 項目を標準フィールドでフィルタし、配列を文字列に正規化する共通処理"""
-    filtered = {k: v for k, v in csl_dict.items() if k in STANDARD_FIELDS}
-    for field_name in CSL_STR_FIELDS:
-        val = filtered.get(field_name)
-        if isinstance(val, list):
-            # 空リストの join は "" になる
-            filtered[field_name] = ", ".join(map(str, val))
-    return filtered
+        """CSL-JSON形式のデータを正規化して返す"""
+        return _clean_csl_item(self.csl_data, self.full_id, self.error, self.raw_id, self.prefix)
 
 def _clean_csl_item(raw: dict, full_id: str, error_msg: str | None = None, raw_id: str = "", prefix: str = "") -> dict:
-    """CSL-JSON 項目を Pandoc/Quarto 互換の標準形式に整形する"""
-    csl = _normalize_csl_fields(raw)
+    """CSL-JSON 項目を Pandoc/Quarto 互換の標準形式に整形・補完する"""
+    # 1. 標準フィールドのみを抽出
+    csl = {k: v for k, v in (raw or {}).items() if k in STANDARD_FIELDS}
     csl["id"] = full_id
 
-    # 必須フィールドの補完
-    if not csl.get("type"):
-        csl["type"] = "article-journal"
+    # 2. 文字列であるべきフィールドの正規化
+    for field_name in CSL_STR_FIELDS:
+        if isinstance(csl.get(field_name), list):
+            csl[field_name] = ", ".join(map(str, csl[field_name]))
 
-    if not csl.get("title"):
-        csl["title"] = f"[Error] {error_msg}" if error_msg else f"[{full_id}] Title missing"
-
-    if not csl.get("author"):
-        # プレフィックスとIDが不明な場合はIDから推測
+    # 3. 必須フィールドのフォールバック補完
+    csl.setdefault("type", "article-journal")
+    csl.setdefault("title", f"[Error] {error_msg}" if error_msg else f"[{full_id}] Title missing")
+    csl.setdefault("issued", {"date-parts": [[0]]})
+    if "author" not in csl:
         p_str, r_str = (prefix.upper(), raw_id) if prefix else full_id.split(":", 1)
         csl["author"] = [{"family": f"{p_str} {r_str}", "given": ""}]
-
-    if not csl.get("issued"):
-        csl["issued"] = {"date-parts": [[0]]}
 
     return csl
 
@@ -161,9 +144,10 @@ def _clean_csl_item(raw: dict, full_id: str, error_msg: str | None = None, raw_i
 # ==========================================
 
 class BaseClient:
-    def __init__(self, settings: Settings, rate: float):
+    def __init__(self, settings: Settings, rate: float, prefix: str):
         self.settings = settings
         self.rate = rate
+        self.prefix = prefix
         self.lock = threading.Lock()
         self.next_call = 0.0
 
@@ -172,7 +156,8 @@ class BaseClient:
         self.session.mount("https://", HTTPAdapter(max_retries=retry))
         self.session.mount("http://", HTTPAdapter(max_retries=retry))
 
-    def _wait_rate_limit(self):
+    def fetch_csl(self, url: str, raw_id: str, params: dict | None = None, headers: dict | None = None) -> ArticleMetadata:
+        """APIリクエストを実行し、結果を ArticleMetadata として返す共通処理"""
         with self.lock:
             now = time.time()
             wait_time = max(0.0, self.next_call - now)
@@ -180,53 +165,35 @@ class BaseClient:
         if wait_time > 0:
             time.sleep(wait_time)
 
-    def request_csl(self, url: str, params: dict | None = None, headers: dict | None = None) -> dict | str:
-        """APIリクエストを実行し、JSONデータまたはエラーメッセージを返す"""
-        self._wait_rate_limit()
         try:
             resp = self.session.get(url, params=params, headers=headers, timeout=self.settings.api_timeout, allow_redirects=True)
             if resp.status_code == 404:
-                return "Not found"
+                return ArticleMetadata.error_result(self.prefix, raw_id, "Not found", 404)
             resp.raise_for_status()
-            return resp.json()
+            return ArticleMetadata(prefix=self.prefix, raw_id=raw_id, csl_data=resp.json())
         except Exception as e:
-            return str(e)
+            return ArticleMetadata.error_result(self.prefix, raw_id, str(e), 500)
 
 class PubMedClient(BaseClient):
     def __init__(self, settings: Settings):
-        super().__init__(settings, rate=9.0 if settings.api_key else 3.0)
+        super().__init__(settings, rate=9.0 if settings.api_key else 3.0, prefix="pmid")
 
     def _fetch_single(self, raw_id: str) -> ArticleMetadata:
         params = {"format": "csl", "id": raw_id}
         if self.settings.api_key:
             params["api_key"] = self.settings.api_key
-        
-        result = self.request_csl(self.settings.pubmed_api_base, params=params)
-        
-        if isinstance(result, dict):
-            return ArticleMetadata(prefix="pmid", raw_id=raw_id, csl_data=result)
-        else:
-            status = 404 if result == "Not found" else 500
-            return ArticleMetadata.error_result("pmid", raw_id, result, status)
+        return self.fetch_csl(self.settings.pubmed_api_base, raw_id, params=params)
 
 class DoiClient(BaseClient):
     def __init__(self, settings: Settings):
-        super().__init__(settings, rate=5.0)
+        super().__init__(settings, rate=5.0, prefix="doi")
 
     def _fetch_single(self, raw_id: str) -> ArticleMetadata:
-        actual_doi = urllib.parse.unquote(raw_id)
-        url = f"{self.settings.doi_api_base}{actual_doi}"
+        url = f"{self.settings.doi_api_base}{urllib.parse.unquote(raw_id)}"
         headers = {"Accept": "application/vnd.citationstyles.csl+json"}
         if self.settings.email:
             headers["User-Agent"] = f"QuartoRef/{__version__} (mailto:{self.settings.email})"
-
-        result = self.request_csl(url, headers=headers)
-        
-        if isinstance(result, dict):
-            return ArticleMetadata(prefix="doi", raw_id=raw_id, csl_data=result)
-        else:
-            status = 404 if result == "Not found" else 500
-            return ArticleMetadata.error_result("doi", raw_id, result, status)
+        return self.fetch_csl(url, raw_id, headers=headers)
 
 # ==========================================
 # 🛠️ ユーティリティ
@@ -268,31 +235,25 @@ def normalize_markdown(text: str) -> tuple[str, list[tuple[str, str]]]:
     """タグの統合とIDの抽出（ワンパス走査）"""
     found_ids = {}
 
-    def format_clean_id(prefix: str, raw_id: str) -> str:
-        """IDのクリーニングと正規化"""
-        clean_id = raw_id.strip().rstrip(".,")
-        return clean_id.lower() if prefix == "doi" else clean_id
-
     def process_match(m):
-        # 1. 連続ブロックまたは単一の括弧付きタグ [@pmid:1][@pmid:2]
-        if m.group(1):
-            tags = RE_TAG_EXTRACT.findall(m.group(1))
-            # 順序を保ったまま重複排除 (dict.fromkeys で意図を明確化)
-            for prefix, raw_id in tags:
-                clean_id = format_clean_id(prefix, raw_id)
-                found_ids[f"{prefix}:{clean_id}"] = (prefix, clean_id)
-            unique_keys = dict.fromkeys(f"@{p}:{format_clean_id(p, r)}" for p, r in tags)
-            return f"[{'; '.join(unique_keys)}]"
-        
-        # 2. 裸のタグ @pmid:1
-        prefix, raw_id = m.group(3), m.group(4)
-        clean_id = format_clean_id(prefix, raw_id)
-        full_tag = f"{prefix}:{clean_id}"
-        found_ids[full_tag] = (prefix, clean_id)
-        return f"@{full_tag}"
+        # group(1) があれば括弧付きブロック(複数タグ含む)、なければ裸の単一タグ(group(3), group(4))
+        tags = RE_TAG_EXTRACT.findall(m.group(1)) if m.group(1) else [(m.group(3), m.group(4))]
+
+        unique_tags = []
+        for p, r in tags:
+            clean_id = r.strip().rstrip(".,")
+            if p == "doi": clean_id = clean_id.lower()
+
+            full_tag = f"{p}:{clean_id}"
+            found_ids[full_tag] = (p, clean_id)
+
+            tag_str = f"@{full_tag}"
+            if tag_str not in unique_tags:
+                unique_tags.append(tag_str)
+
+        return f"[{'; '.join(unique_tags)}]" if m.group(1) else unique_tags[0]
 
     text = RE_ONE_PASS.sub(process_match, text)
-
     return text, list(found_ids.values())
 
 def update_yaml_frontmatter(yaml_raw: str, body_text: str, bib_filename: str, yaml_data: dict) -> str:
@@ -300,11 +261,11 @@ def update_yaml_frontmatter(yaml_raw: str, body_text: str, bib_filename: str, ya
     bibs = yaml_data.get("bibliography", [])
     if isinstance(bibs, str):
         bibs = [bibs]
-    
+
     if bib_filename not in bibs:
         bibs.append(bib_filename)
         yaml_data["bibliography"] = bibs[0] if len(bibs) == 1 else bibs
-        
+
         buf = io.StringIO()
         yaml_parser.dump(yaml_data, buf)
 
@@ -431,7 +392,7 @@ def main() -> int:
     # 既存のキャッシュも含めて再度正規化を適用 (Pandoc互換性のため)
     bib_changed = False
     for full_id, item in list(existing_bib.items()):
-        normalized = _normalize_csl_fields(item)
+        normalized = _clean_csl_item(item, full_id)
         if normalized != item:
             existing_bib[full_id] = normalized
             bib_changed = True
@@ -439,7 +400,7 @@ def main() -> int:
     if to_fetch or bib_changed:
         export_list = sorted(existing_bib.values(), key=lambda x: str(x.get("id", "")))
         bib_path.write_text(json.dumps(export_list, ensure_ascii=False, indent=2), encoding="utf-8")
-        
+
         if to_fetch:
             print(f"✓ Bibliography synced: {bib_filename} (Total: {len(export_list)})")
         elif bib_changed:
@@ -453,7 +414,7 @@ def main() -> int:
         bak_path = in_path.with_suffix(in_path.suffix + ".bak")
         shutil.copy2(in_path, bak_path)
         print(f"✓ Backup created: {bak_path.name}")
-        
+
         in_path.write_text(processed_text, encoding="utf-8")
         print(f"✓ Document updated: {in_path.name}")
     else:
