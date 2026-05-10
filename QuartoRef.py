@@ -56,7 +56,7 @@ RE_ONE_PASS = re.compile(r'(?P<block>\[@(?:pmid|doi):[^\]]+\](?:\s*\[@(?:pmid|do
 RE_YAML_BLOCK = re.compile(r'^\s*---\r?\n(.*?)\r?\n---', re.DOTALL)
 
 # ==========================================
-# 📦 データモデル & ロジック
+# 📦 データモデル
 # ==========================================
 
 @dataclass(frozen=True)
@@ -78,6 +78,10 @@ class ArticleMetadata:
     @property
     def is_valid(self) -> bool:
         return self.error is None and bool(self.csl_data)
+
+# ==========================================
+# 🔧 ユーティリティ
+# ==========================================
 
 def get_yaml_parser() -> YAML:
     """スレッドセーフなYAMLパーサーのインスタンスを提供する"""
@@ -106,63 +110,29 @@ def clean_csl_item(meta: ArticleMetadata) -> dict[str, Any]:
         csl["author"] = [{"family": f"{p_str.upper()} {r_str}".strip(), "given": ""}]
     return csl
 
-def process_markdown_content(text: str) -> tuple[str, list[tuple[str, str]]]:
-    """本文の正規化とID抽出（副作用を抑えた設計）"""
-    found_ids: dict[str, tuple[str, str]] = {}
+# ==========================================
+# 🌐 外部連携 (Network/IO)
+# ==========================================
 
-    def _format_id(p: str, r: str) -> str:
-        p_low = p.lower()
-        clean_id = r.strip().rstrip(".,")
-        if p_low == "doi": clean_id = clean_id.lower()
-        return f"{p_low}:{clean_id}"
+def download_csl_style(style_name: str, repo_url: str) -> bool:
+    """CSLスタイルファイルをリポジトリからダウンロードする"""
+    if style_name.startswith(("http://", "https://")): return True
+    safe_name = Path(style_name).name
+    if not safe_name.endswith(".csl"):
+        safe_name += ".csl"
 
-    def process_match(m: re.Match) -> str:
-        text_chunk = m.group("block") or m.group("tag")
-        tags = [f"@{_format_id(p, r)}" for p, r in RE_TAG_EXTRACT.findall(text_chunk)]
+    dest_path = Path.cwd() / safe_name
+    if dest_path.exists(): return True
 
-        # 状態の更新を明示的に行う
-        for t in tags:
-            full_tag = t[1:]
-            prefix, _, raw_id = full_tag.partition(":")
-            found_ids[full_tag] = (prefix, raw_id)
-
-        # 重複除去を維持しつつ結合
-        return f"[{'; '.join(dict.fromkeys(tags))}]" if m.group("block") else f"[{tags[0]}]"
-
-    processed = RE_ONE_PASS.sub(process_match, text)
-    return processed, list(found_ids.values())
-
-def inject_yaml_bibliography(text: str, bib_filename: str) -> str:
-    """YAMLフロントマターに bibliography を安全に挿入/更新"""
-    yaml_match = RE_YAML_BLOCK.search(text)
-    # ファイルの先頭（空白許容）にない場合は新規作成
-    if not yaml_match or yaml_match.start() != 0:
-        return f"---\nbibliography: {bib_filename}\n---\n\n{text}"
-
-    parser = get_yaml_parser()
-    yaml_raw_content = yaml_match.group(1)
+    print(f"Downloading CSL style: {safe_name}...", file=sys.stderr)
     try:
-        data = parser.load(yaml_raw_content) or {}
-    except Exception:
-        return text
-
-    # 安全かつコンパクトなリスト化
-    bibs_raw = data.get("bibliography", [])
-    bibs = [str(b) for b in (bibs_raw if isinstance(bibs_raw, list) else [bibs_raw])]
-
-    if bib_filename not in bibs:
-        bibs.append(bib_filename)
-        data["bibliography"] = bibs[0] if len(bibs) == 1 else bibs
-
-        buf = io.StringIO()
-        parser.dump(data, buf)
-        new_yaml = f"---\n{buf.getvalue().strip()}\n---"
-        return RE_YAML_BLOCK.sub(new_yaml, text, count=1)
-    return text
-
-# ==========================================
-# 🌐 API クライアント
-# ==========================================
+        r = requests.get(repo_url + safe_name, timeout=10)
+        if r.status_code == 200:
+            dest_path.write_text(r.text, encoding="utf-8")
+            return True
+    except Exception as e:
+        print(f"Warning: Error downloading CSL: {e}", file=sys.stderr)
+    return False
 
 class CitationAPIClient:
     def __init__(self, settings: Settings):
@@ -220,29 +190,89 @@ class CitationAPIClient:
             return ArticleMetadata(full_id=full_id, error=str(e), status_code=500)
 
 # ==========================================
-# 🚀 実行・I/O層
+# 📝 ドキュメント処理 (Core Logic)
 # ==========================================
 
-def download_csl_style(style_name: str, repo_url: str) -> bool:
-    if style_name.startswith(("http://", "https://")): return True
-    safe_name = Path(style_name).name
-    if not safe_name.endswith(".csl"):
-        safe_name += ".csl"
+def process_markdown_content(text: str) -> tuple[str, list[tuple[str, str]]]:
+    """本文の正規化とID抽出（副作用を抑えた設計）"""
+    found_ids: dict[str, tuple[str, str]] = {}
 
-    dest_path = Path.cwd() / safe_name
-    if dest_path.exists(): return True
+    def _format_id(p: str, r: str) -> str:
+        p_low = p.lower()
+        clean_id = r.strip().rstrip(".,")
+        if p_low == "doi": clean_id = clean_id.lower()
+        return f"{p_low}:{clean_id}"
 
-    print(f"Downloading CSL style: {safe_name}...", file=sys.stderr)
+    def process_match(m: re.Match) -> str:
+        text_chunk = m.group("block") or m.group("tag")
+        tags = [f"@{_format_id(p, r)}" for p, r in RE_TAG_EXTRACT.findall(text_chunk)]
+
+        # 状態の更新を明示的に行う
+        for t in tags:
+            full_tag = t[1:]
+            prefix, _, raw_id = full_tag.partition(":")
+            found_ids[full_tag] = (prefix, raw_id)
+
+        # 重複除去を維持しつつ結合
+        return f"[{'; '.join(dict.fromkeys(tags))}]" if m.group("block") else f"[{tags[0]}]"
+
+    processed = RE_ONE_PASS.sub(process_match, text)
+    return processed, list(found_ids.values())
+
+def process_yaml_frontmatter(text: str, bib_filename: str, settings: Settings) -> str:
+    """YAMLフロントマターを1回だけ解析し、CSLのダウンロードと文献リストの更新を同時に行う"""
+    yaml_match = RE_YAML_BLOCK.search(text)
+
+    # YAMLブロックがない場合、必要なら作成
+    if not yaml_match or yaml_match.start() != 0:
+        if settings.update_yaml:
+            return f"---\nbibliography: {bib_filename}\n---\n\n{text}"
+        return text
+
+    parser = get_yaml_parser()
+    yaml_raw_content = yaml_match.group(1)
     try:
-        r = requests.get(repo_url + safe_name, timeout=10)
-        if r.status_code == 200:
-            dest_path.write_text(r.text, encoding="utf-8")
-            return True
+        data = parser.load(yaml_raw_content)
+        if not isinstance(data, dict):
+            data = {}
     except Exception as e:
-        print(f"Warning: Error downloading CSL: {e}", file=sys.stderr)
-    return False
+        print(f"Warning: Failed to parse YAML frontmatter. ({e})", file=sys.stderr)
+        return text
+
+    modified = False
+
+    # 1. CSLファイルのダウンロード
+    if settings.download_csl and (csl_val := data.get("csl")):
+        download_csl_style(str(csl_val), settings.csl_repo_url)
+
+    # 2. Bibliographyの更新
+    if settings.update_yaml:
+        bibs_raw = data.get("bibliography", [])
+        bibs = [str(b) for b in (bibs_raw if isinstance(bibs_raw, list) else [bibs_raw])]
+
+        if bib_filename not in bibs:
+            bibs.append(bib_filename)
+            data["bibliography"] = bibs[0] if len(bibs) == 1 else bibs
+            modified = True
+
+    # 変更があった場合のみ、YAMLを再構築してテキストを置換
+    if modified:
+        buf = io.StringIO()
+        parser.dump(data, buf)
+        yaml_output = buf.getvalue().strip()
+        # explicit_start=True の場合、既に --- が含まれている可能性があるため重複を防ぐ
+        new_yaml = yaml_output if yaml_output.startswith("---") else f"---\n{yaml_output}"
+        new_yaml = f"{new_yaml}\n---"
+        return RE_YAML_BLOCK.sub(new_yaml, text, count=1)
+
+    return text
+
+# ==========================================
+# 🚀 実行制御層
+# ==========================================
 
 def _select_target_file() -> Path | None:
+    """実行対象のファイルをユーザーに選択させる (CLI用)"""
     cands = sorted(itertools.chain(Path.cwd().glob("*.qmd"), Path.cwd().glob("*.md")))
     if not cands: return None
     if len(cands) == 1: return cands[0]
@@ -292,19 +322,8 @@ def main() -> int:
     # 1. コンテンツ処理
     processed_text, id_pairs = process_markdown_content(original_text)
 
-    if settings.download_csl:
-        yaml_match = RE_YAML_BLOCK.search(processed_text)
-        if yaml_match:
-            try:
-                parser_inst = get_yaml_parser()
-                yaml_data = parser_inst.load(yaml_match.group(1)) or {}
-                if csl_val := yaml_data.get("csl"):
-                    download_csl_style(str(csl_val), settings.csl_repo_url)
-            except Exception as e:
-                print(f"Warning: Failed to parse YAML for CSL downloading. ({e})", file=sys.stderr)
-
-    if settings.update_yaml:
-        processed_text = inject_yaml_bibliography(processed_text, bib_path.name)
+    # 1回の処理でCSLダウンロードとYAML更新を両方済ませる
+    processed_text = process_yaml_frontmatter(processed_text, bib_path.name, settings)
 
     # 2. キャッシュ同期
     existing_bib: dict[str, Any] = {}

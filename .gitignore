@@ -10,3 +10,6 @@ tests/
 
 # VS Code / Workspace
 *.code-workspace
+
+# Environment variables (Secrets)
+.env
