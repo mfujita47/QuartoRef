@@ -39,16 +39,10 @@ except ImportError:
 
 load_dotenv(override=False)
 
-# YAMLパーサーの共通設定
-yaml_parser = YAML()
-yaml_parser.preserve_quotes = True
-yaml_parser.explicit_start = True
-yaml_parser.explicit_end = False
-
 # ==========================================
-# ⚙️ 定数定義
+# ⚙️ 定数・正規表現定義
 # ==========================================
-CSL_STR_FIELDS = ["ISSN", "ISBN", "container-title", "container-title-short", "publisher"]
+CSL_STR_FIELDS = {"ISSN", "ISBN", "container-title", "container-title-short", "publisher"}
 STANDARD_FIELDS = {
     "id", "type", "title", "author", "issued", "container-title",
     "container-title-short", "volume", "issue", "page", "DOI", "PMID",
@@ -56,11 +50,9 @@ STANDARD_FIELDS = {
     "journal-abbreviation", "language", "accessed"
 }
 
-# 🔍 正規表現パターン (Smart Merging 用)
-RE_TAG_PATTERN = r'@(?P<prefix>pmid|doi):(?P<id>[^;\]\s]+)'
-RE_TAG_EXTRACT = re.compile(RE_TAG_PATTERN)
-RE_BLOCK = r'\[@(?:pmid|doi):[^\]]+\]'
-RE_ONE_PASS = re.compile(f'(?P<block>{RE_BLOCK}(?:\\s*{RE_BLOCK})*)|(?P<tag>{RE_TAG_PATTERN})')
+RE_TAG_EXTRACT = re.compile(r'@(?P<prefix>pmid|doi):(?P<id>[^;\]\s]+)', re.IGNORECASE)
+RE_ONE_PASS = re.compile(r'(?P<block>\[@(?:pmid|doi):[^\]]+\](?:\s*\[@(?:pmid|doi):[^\]]+\])*)|(?P<tag>@(?:pmid|doi):[^;\]\s]+)', re.IGNORECASE)
+RE_YAML_BLOCK = re.compile(r'^\s*---\r?\n(.*?)\r?\n---', re.DOTALL)
 
 # ==========================================
 # 📦 データモデル & ロジック
@@ -86,131 +78,141 @@ class ArticleMetadata:
     def is_valid(self) -> bool:
         return self.error is None and bool(self.csl_data)
 
-def clean_csl_item(meta: ArticleMetadata) -> dict[str, Any]:
-    """メタデータを標準形式の CSL-JSON 辞書に変換"""
-    raw = meta.csl_data or {}
-    csl = {k: (", ".join(map(str, v)) if k in CSL_STR_FIELDS and isinstance(v, list) else v)
-           for k, v in raw.items() if k in STANDARD_FIELDS}
+def get_yaml_parser() -> YAML:
+    """スレッドセーフなYAMLパーサーのインスタンスを提供する"""
+    parser = YAML()
+    parser.preserve_quotes = True
+    parser.explicit_start = True
+    parser.explicit_end = False
+    return parser
 
-    csl["id"] = meta.full_id
-    csl.setdefault("type", "article-journal")
-    csl.setdefault("title", f"[Error] {meta.error}" if meta.error else f"[{meta.full_id}] Title missing")
-    csl.setdefault("issued", {"date-parts": [[0]]})
+def clean_csl_item(meta: ArticleMetadata) -> dict[str, Any]:
+    """メタデータを標準形式の CSL-JSON 辞書に変換 (最適化版)"""
+    # 1パスで標準フィールド抽出と正規化
+    csl = {k: (", ".join(map(str, v)) if k in CSL_STR_FIELDS and isinstance(v, list) else v)
+           for k, v in (meta.csl_data or {}).items() if k in STANDARD_FIELDS}
+
+    # 辞書のハッシュ再計算を最小限に抑える update 方式
+    csl.update({
+        "id": meta.full_id,
+        "type": csl.get("type", "article-journal"),
+        "title": f"[Error] {meta.error}" if meta.error else csl.get("title", f"[{meta.full_id}] Title missing"),
+        "issued": csl.get("issued", {"date-parts": [[0]]})
+    })
 
     if "author" not in csl:
-        parts = meta.full_id.split(":", 1)
-        p_str, r_str = (parts[0].upper(), parts[1]) if len(parts) == 2 else ("UNKNOWN", meta.full_id)
-        csl["author"] = [{"family": f"{p_str} {r_str}".strip(), "given": ""}]
+        p_str, _, r_str = meta.full_id.partition(":")
+        csl["author"] = [{"family": f"{p_str.upper()} {r_str}".strip(), "given": ""}]
     return csl
 
 def process_markdown_content(text: str) -> tuple[str, list[tuple[str, str]]]:
     """本文の正規化とID抽出（副作用を抑えた設計）"""
     found_ids: dict[str, tuple[str, str]] = {}
 
-    def _format_tag(prefix: str, raw_id: str) -> tuple[str, str]:
-        prefix = prefix.lower()
-        clean_id = raw_id.strip().rstrip(".,")
-        if prefix == "doi": clean_id = clean_id.lower()
-        return prefix, clean_id
+    def _format_id(p: str, r: str) -> str:
+        p_low = p.lower()
+        clean_id = r.strip().rstrip(".,")
+        if p_low == "doi": clean_id = clean_id.lower()
+        return f"{p_low}:{clean_id}"
 
     def process_match(m: re.Match) -> str:
-        if m.group("block"):
-            tags = RE_TAG_EXTRACT.findall(m.group("block"))
-            unique_formatted_tags = []
-            for p, r in tags:
-                prefix, clean_id = _format_tag(p, r)
-                full_tag = f"{prefix}:{clean_id}"
-                found_ids[full_tag] = (prefix, clean_id)
-                unique_formatted_tags.append(f"@{full_tag}")
+        text_chunk = m.group("block") or m.group("tag")
+        tags = [f"@{_format_id(p, r)}" for p, r in RE_TAG_EXTRACT.findall(text_chunk)]
 
-            # 重複除去を維持しつつ結合
-            return f"[{'; '.join(dict.fromkeys(unique_formatted_tags))}]"
+        # 状態の更新を明示的に行う
+        for t in tags:
+            full_tag = t[1:]
+            prefix, _, raw_id = full_tag.partition(":")
+            found_ids[full_tag] = (prefix, raw_id)
 
-        # 単一タグ (@tag) -> [ @tag ] へ正規化
-        prefix, clean_id = _format_tag(m.group('prefix'), m.group('id'))
-        full_tag = f"{prefix}:{clean_id}"
-        found_ids[full_tag] = (prefix, clean_id)
-        return f"[@{full_tag}]"
+        # 重複除去を維持しつつ結合
+        return f"[{'; '.join(dict.fromkeys(tags))}]" if m.group("block") else f"[{tags[0]}]"
 
     processed = RE_ONE_PASS.sub(process_match, text)
     return processed, list(found_ids.values())
 
 def inject_yaml_bibliography(text: str, bib_filename: str) -> str:
     """YAMLフロントマターに bibliography を安全に挿入/更新"""
-    yaml_match = re.match(r'^---\r?\n(.*?)\r?\n---', text, re.DOTALL)
-    if not yaml_match:
+    yaml_match = RE_YAML_BLOCK.search(text)
+    # ファイルの先頭（空白許容）にない場合は新規作成
+    if not yaml_match or yaml_match.start() != 0:
         return f"---\nbibliography: {bib_filename}\n---\n\n{text}"
 
+    parser = get_yaml_parser()
     yaml_raw_content = yaml_match.group(1)
     try:
-        data = yaml_parser.load(yaml_raw_content) or {}
+        data = parser.load(yaml_raw_content) or {}
     except Exception:
         return text
 
-    # YAMLの値がどんな型で入ってくるか分からないための安全なリスト化
-    bibs_raw = data.get("bibliography")
-    if bibs_raw is None:
-        bibs = []
-    elif isinstance(bibs_raw, list):
-        bibs = [str(b) for b in bibs_raw]
-    elif isinstance(bibs_raw, str):
-        bibs = [bibs_raw]
-    else:
-        bibs = [str(bibs_raw)]
+    # 安全かつコンパクトなリスト化
+    bibs_raw = data.get("bibliography", [])
+    bibs = [str(b) for b in (bibs_raw if isinstance(bibs_raw, list) else [bibs_raw])]
 
     if bib_filename not in bibs:
         bibs.append(bib_filename)
         data["bibliography"] = bibs[0] if len(bibs) == 1 else bibs
 
         buf = io.StringIO()
-        yaml_parser.dump(data, buf)
+        parser.dump(data, buf)
         new_yaml = f"---\n{buf.getvalue().strip()}\n---"
-        return re.sub(r'^---\r?\n.*?\r?\n---', new_yaml, text, count=1, flags=re.DOTALL)
+        return RE_YAML_BLOCK.sub(new_yaml, text, count=1)
     return text
 
 # ==========================================
-# 🌐 API クライアント (統合)
+# 🌐 API クライアント
 # ==========================================
 
 class CitationAPIClient:
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.locks = {"pmid": threading.Lock(), "doi": threading.Lock()}
-        self.next_calls = {"pmid": 0.0, "doi": 0.0}
-        self.rates = {"pmid": 9.0 if settings.api_key else 3.0, "doi": 5.0}
-
+        self.rates = {
+            "pmid": {"lock": threading.Lock(), "next": 0.0, "limit": 9.0 if settings.api_key else 3.0},
+            "doi": {"lock": threading.Lock(), "next": 0.0, "limit": 5.0}
+        }
         self.session = requests.Session()
         retry = Retry(total=5, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
         self.session.mount("https://", HTTPAdapter(max_retries=retry))
 
     def _wait_for_rate(self, prefix: str):
-        with self.locks[prefix]:
+        cfg = self.rates[prefix]
+        with cfg["lock"]:
             now = time.time()
-            wait_time = max(0.0, self.next_calls[prefix] - now)
-            self.next_calls[prefix] = now + wait_time + (1.0 / self.rates[prefix])
+            wait_time = max(0.0, cfg["next"] - now)
+            cfg["next"] = now + wait_time + (1.0 / cfg["limit"])
         if wait_time > 0: time.sleep(wait_time)
+
+    def _build_request_kwargs(self, prefix: str, raw_id: str) -> dict[str, Any]:
+        """APIリクエストのパラメータ構築を分離し、可読性を向上"""
+        kwargs: dict[str, Any] = {"timeout": self.settings.api_timeout}
+
+        if prefix == "pmid":
+            kwargs["url"] = "https://pmc.ncbi.nlm.nih.gov/api/ctxp/v1/pubmed/"
+            kwargs["params"] = {"format": "csl", "id": raw_id}
+            if self.settings.api_key:
+                kwargs["params"]["api_key"] = self.settings.api_key
+        else: # doi
+            kwargs["url"] = f"https://doi.org/{urllib.parse.unquote(raw_id)}"
+            kwargs["headers"] = {"Accept": "application/vnd.citationstyles.csl+json"}
+            if self.settings.email:
+                kwargs["headers"]["User-Agent"] = f"QuartoRef/{__version__} (mailto:{self.settings.email})"
+
+        return kwargs
 
     def fetch(self, prefix: str, raw_id: str) -> ArticleMetadata:
         self._wait_for_rate(prefix)
         full_id = f"{prefix}:{raw_id}"
-        try:
-            if prefix == "pmid":
-                url = "https://pmc.ncbi.nlm.nih.gov/api/ctxp/v1/pubmed/"
-                params = {"format": "csl", "id": raw_id} | ({"api_key": self.settings.api_key} if self.settings.api_key else {})
-                resp = self.session.get(url, params=params, timeout=self.settings.api_timeout)
-            else:
-                url = f"https://doi.org/{urllib.parse.unquote(raw_id)}"
-                headers = {"Accept": "application/vnd.citationstyles.csl+json"}
-                if self.settings.email: headers["User-Agent"] = f"QuartoRef/{__version__} (mailto:{self.settings.email})"
-                resp = self.session.get(url, headers=headers, timeout=self.settings.api_timeout)
+        req_kwargs = self._build_request_kwargs(prefix, raw_id)
 
-            if resp.status_code == 404: return ArticleMetadata(full_id=full_id, error="Not found", status_code=404)
+        try:
+            resp = self.session.get(**req_kwargs)
+            if resp.status_code == 404:
+                return ArticleMetadata(full_id=full_id, error="Not found", status_code=404)
 
             resp.raise_for_status()
             return ArticleMetadata(full_id=full_id, csl_data=resp.json())
 
         except requests.exceptions.HTTPError as e:
-            # 💡 改善: 詳細なHTTPステータスコードを捕捉
             status = e.response.status_code if e.response is not None else 500
             return ArticleMetadata(full_id=full_id, error=str(e), status_code=status)
         except Exception as e:
@@ -250,7 +252,6 @@ def _select_target_file() -> Path | None:
         c = input("Select (number): ").strip()
         if c.isdigit() and 1 <= int(c) <= len(cands): return cands[int(c)-1]
     except KeyboardInterrupt:
-        # 💡 改善: Ctrl+C を明示的なキャンセルとして扱い、プロセスを正常終了させる
         print("\nOperation cancelled by user.", file=sys.stderr)
         sys.exit(0)
     except EOFError:
@@ -291,10 +292,11 @@ def main() -> int:
     processed_text, id_pairs = process_markdown_content(original_text)
 
     if settings.download_csl:
-        yaml_match = re.match(r'^---\r?\n(.*?)\r?\n---', processed_text, re.DOTALL)
+        yaml_match = RE_YAML_BLOCK.search(processed_text)
         if yaml_match:
             try:
-                yaml_data = yaml_parser.load(yaml_match.group(1)) or {}
+                parser_inst = get_yaml_parser()
+                yaml_data = parser_inst.load(yaml_match.group(1)) or {}
                 if csl_val := yaml_data.get("csl"):
                     download_csl_style(str(csl_val), settings.csl_repo_url)
             except Exception as e:
