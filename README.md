@@ -1,4 +1,4 @@
-# 📘 QuartoRef (v1.2.1)
+# 📘 QuartoRef (v1.2.2)
 
 [English](#english) | [日本語](#日本語)
 
@@ -13,11 +13,11 @@ By using [PMIDs](https://pubmed.ncbi.nlm.nih.gov/) and [DOIs](https://doi.org/) 
 ### ✨ Key Features
 
 - **No Manual Database Maintenance**: Use `[@pmid:ID]` or `[@doi:ID]` directly in your text. The tool fetches everything for you.
-- **Smart Citation Cleaning**: Automatically merges consecutive tags (e.g., `[@pmid:1] [@pmid:2]` becomes `[@pmid:1; @pmid:2]`) and fixes accidental trailing punctuation or case issues.
+- **Smart Citation Merging**: Automatically merges consecutive tags (e.g., `[@pmid:1] [@pmid:2]` becomes `[@pmid:1; @pmid:2]`) and fixes accidental trailing punctuation or case issues.
 - **Zero-Configuration YAML Management**: The tool automatically registers the generated bibliography file in your YAML front matter.
 - **Automatic CSL Style Retrieval**: If a CSL style is specified in the YAML (e.g., `csl: nature.csl`) and the file is missing locally, it is automatically downloaded from the [official CSL repository](https://github.com/citation-style-language/styles).
 - **Fail-Safe Processing**: Even if a network error occurs or an ID is invalid, the tool generates a "placeholder" to ensure your Quarto document still renders without errors.
-- **Portable & Standalone**: It's just a single Python file. Copy it to your project folder and you're ready to go.
+- **Production Ready**: Optimized with thread-safe rate limiting and robust error handling.
 
 ### 📦 Installation
 
@@ -45,16 +45,25 @@ Citations must include the `pmid:` or `doi:` prefix:
 
 > **Note**: If a DOI contains a semicolon (`;`), you **must** manually write it as `%3B` in your manuscript (e.g., `[@doi:10.1101/abc%3Bv1]`). This prevents Quarto from misidentifying the semicolon as a citation separator.
 
-
 ### CLI Options
 
-| Option          | Description                                                                       | Default          |
-| :-------------- | :-------------------------------------------------------------------------------- | :--------------- |
-| `input_file`    | Target `.qmd` or `.md` file.                                                      | (Menu selection) |
-| `--update-yaml`   | Toggle YAML registration (use `--no-update-yaml` to disable).                     | (Enabled)        |
-| `--download-csl` | Toggle CSL style retrieval (use `--no-download-csl` to disable).                   | (Enabled)        |
-| `--email EMAIL` | Set your email to get better API limits for DOI fetching.                         | (Env `EMAIL`)    |
-| `--api-key KEY` | Set your [NCBI API Key](https://www.ncbi.nlm.nih.gov/account/settings/) for speed. | (Env `NCBI_API_KEY`) |
+| Option           | Description                                                      | Default          |
+| :--------------- | :--------------------------------------------------------------- | :--------------- |
+| `input_file`     | Target `.qmd` or `.md` file.                                     | (Menu selection) |
+| `--update-yaml`  | Toggle YAML registration (use `--no-update-yaml` to disable).    | (Enabled)        |
+| `--download-csl` | Toggle CSL style retrieval (use `--no-download-csl` to disable). | (Enabled)        |
+
+#### Environment Variables (.env)
+
+For better performance and reliability, create a `.env` file in your project root:
+
+```env
+NCBI_API_KEY=your_api_key_here
+EMAIL=your_email@example.com
+```
+
+- **NCBI_API_KEY**: Speed up PubMed metadata fetching.
+- **EMAIL**: Required for the DOI "Polite Pool" to ensure stable access.
 
 ### 🛠 Rendering with Quarto
 
@@ -74,11 +83,11 @@ Once `QuartoRef` has organized your citations, render your document normally:
 ### ✨ 主な特長
 
 - **文献リストの管理が不要に**: 本文中に `[@pmid:ID]` や `[@doi:ID]` と書くだけで、ツールが自動で情報を集めてきます。
-- **引用タグを自動で「お掃除」**: 連続するタグの統合（`[@pmid:1] [@pmid:2]` → `[@pmid:1; @pmid:2]`）や、大文字小文字の乱れ、末尾の不要な句読点などを自動で修正します。
+- **引用タグをスマートに統合**: 連続するタグの統合（`[@pmid:1] [@pmid:2]` → `[@pmid:1; @pmid:2]`）や、大文字小文字の乱れ、末尾の不要な句読点などを自動で修正します。
 - **YAML 設定もおまかせ**: 生成された文献ファイルを YAML フロントマターの `bibliography` に自動で登録。
 - **CSL スタイルの自動取得**: YAML で `csl: nature.csl` のように指定されておりローカルにファイルがない場合、[公式リポジトリ](https://github.com/citation-style-language/styles)から自動取得します。
 - **エラーに強い設計**: 万が一ネットワークエラーや ID の間違いがあっても、仮のデータを生成して Quarto のレンダリング（PDF/HTML作成）が止まらないように配慮します。
-- **どこでも動くポータブル設計**: スクリプト 1 ファイルだけで動作。プロジェクトフォルダにコピーするだけで準備完了です。
+- **プロフェッショナル仕様**: スレッドセーフなレート制限、詳細なエラーハンドリング、副作用を排した堅牢な設計。
 
 ### 📦 インストール
 
@@ -108,13 +117,23 @@ python QuartoRef.py
 
 ### コマンドラインオプション
 
-| オプション      | 説明                                                                                | デフォルト       |
-| :-------------- | :---------------------------------------------------------------------------------- | :--------------- |
-| `input_file`    | 対象の原稿ファイル (`.qmd` / `.md`)。                                               | (メニュー選択)   |
-| `--update-yaml` | YAML フロントマターへの登録の切り替え (無効化は `--no-update-yaml`)。                 | (有効)           |
-| `--download-csl`| CSL スタイルの自動取得の切り替え (無効化は `--no-download-csl`)。                     | (有効)           |
-| `--email EMAIL` | DOI 取得時の制限を緩和するためのメールアドレス。                                     | (環境変数 `EMAIL`) |
-| `--api-key KEY` | PubMed の取得を高速化する [API キー](https://www.ncbi.nlm.nih.gov/account/settings/)。 | (環境変数 `NCBI_API_KEY`) |
+| オプション       | 説明                                                                  | デフォルト     |
+| :--------------- | :-------------------------------------------------------------------- | :------------- |
+| `input_file`     | 対象の原稿ファイル (`.qmd` / `.md`)。                                 | (メニュー選択) |
+| `--update-yaml`  | YAML フロントマターへの登録の切り替え (無効化は `--no-update-yaml`)。 | (有効)         |
+| `--download-csl` | CSL スタイルの自動取得の切り替え (無効化は `--no-download-csl`)。     | (有効)         |
+
+#### 環境変数による設定 (.env)
+
+安定した動作とパフォーマンスのために、プロジェクトのルートディレクトリに `.env` ファイルを作成して設定することを推奨します：
+
+```env
+NCBI_API_KEY=あなたのAPIキー
+EMAIL=あなたのメールアドレス
+```
+
+- **NCBI_API_KEY**: PubMed からの情報取得を高速化します。
+- **EMAIL**: DOI (Crossref) 取得時の「Polite Pool」を利用するために必要です。
 
 ### 🛠 Quarto でのレンダリング
 

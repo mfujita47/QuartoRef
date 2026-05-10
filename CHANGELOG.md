@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-05-10
+
+### Added
+
+- **Production-Ready Robustness**: Implemented extensive error handling for file I/O and API requests to ensure stable operation in all environments.
+- **Improved YAML Handling**: Enhanced frontmatter detection and update logic using regular expressions, preventing duplication and ensuring correct placement even with BOM or leading spaces.
+- **Detailed Error Reporting**: API fetch failures now include specific HTTP status codes (e.g., 404, 403) for easier troubleshooting.
+- **Better Cancellation UX**: Added a graceful exit (with status code 0) when a user cancels file selection via `Ctrl+C`.
+
+### Changed
+
+- **Consolidated CLI Options**: Simplified command-line interface by moving configuration like API keys and email to `.env` files (recommended) or environment variables.
+- **Internal Refactoring**: Major architectural cleanup to improve performance, thread safety, and long-term maintainability.
+
 ## [1.2.1] - 2026-05-10
 
 ### Fixed
