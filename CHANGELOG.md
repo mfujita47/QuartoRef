@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-05-10
+
+### Fixed
+
+- **CSL-JSON Normalization**: Fixed "expected String or Number, but encountered Array" error during Quarto rendering by ensuring fields like `ISSN`, `alternative-id`, `subject`, and `title` are correctly converted to strings.
+- **Enhanced Compatibility**: Added robust mapping for Crossref item types to standard CSL-JSON types (e.g., `journal-article` -> `article-journal`).
+- **Data Cleanup**: Automatically strips problematic non-standard Crossref fields (`license`, `assertion`, `relation`, `updated-by`) that cause Pandoc parsing failures.
+- **Cache Refresh Logic**: Updated the sync engine to automatically re-normalize all existing bibliography entries, ensuring that legacy cached data is always updated to the latest compatible format.
+
 ## [1.2.0] - 2026-05-10
 
 ### Added

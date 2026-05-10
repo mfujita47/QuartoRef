@@ -9,7 +9,7 @@ Description:
 """
 from __future__ import annotations
 
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 
 import argparse
 import concurrent.futures
@@ -77,6 +77,16 @@ class ArticleMetadata:
     error: str | None = None
     status_code: int = 200
 
+    @classmethod
+    def from_existing(cls, csl: dict[str, Any]) -> ArticleMetadata:
+        """既存のJSONデータからArticleMetadataオブジェクトを復元"""
+        full_id = csl.get("id", "")
+        if ":" in full_id:
+            prefix, raw_id = full_id.split(":", 1)
+        else:
+            prefix, raw_id = "unknown", full_id
+        return cls(prefix=prefix, raw_id=raw_id, csl_data=csl)
+
     @property
     def full_id(self) -> str:
         """JSON内やMarkdown内で使用する一意のID (例: doi:10.123/abc%3Bdef)"""
@@ -90,13 +100,53 @@ class ArticleMetadata:
         """CSL-JSON形式のデータを正規化して返す"""
         csl = self.csl_data.copy() if self.csl_data else {}
         
-        # IDをタグと一致させる
+        # 1. IDをタグと一致させる
         csl["id"] = self.full_id
         
-        # 必須フィールドの補完 (Quartoのビルドエラー防止)
-        if not csl.get("type"):
+        # 2. 文献タイプのマッピング (Crossref -> CSL-JSON)
+        if "type" in csl:
+            type_map = {
+                "journal-article": "article-journal",
+                "book-chapter": "chapter",
+                "proceedings-article": "paper-conference",
+                "monograph": "book",
+                "reference-book": "book",
+                "edited-book": "book",
+                "reference-entry": "entry-encyclopedia",
+                "report": "report",
+                "dissertation": "thesis",
+                "standard": "standard",
+            }
+            csl["type"] = type_map.get(csl["type"], csl["type"])
+        else:
             csl["type"] = "article-journal"
-        
+
+        # 3. 配列フィールドの文字列化 (Pandoc/Quartoのパースエラー防止)
+        string_fields = [
+            "title", "container-title", "publisher", 
+            "original-title", "short-title", "subtitle",
+            "collection-title", "archive", "archive_location", 
+            "event-title", "journal-title", "short-container-title",
+            "ISSN", "ISBN", "PMID", "PMCID", "alternative-id", "subject"
+        ]
+        for f in string_fields:
+            if f in csl:
+                val = csl[f]
+                if isinstance(val, list):
+                    if len(val) > 0:
+                        # 複数はカンマ区切りにする (ISSNなど)
+                        csl[f] = ", ".join([str(x) for x in val])
+                    else:
+                        csl[f] = ""
+
+        # 4. 不要なフィールドの削除 (大規模データやパースエラーの原因を除去)
+        unwanted = ["reference", "content-domain", "abstract", "accepted", 
+                    "published-print", "published-online", "link", "indexed", "created", "deposited",
+                    "license", "assertion", "relation", "updated-by"]
+        for f in unwanted:
+            csl.pop(f, None)
+
+        # 5. 必須フィールドの補完 (Quartoのビルドエラー防止)
         if not csl.get("title"):
             if self.error:
                 csl["title"] = f"[Error] {self.error}"
@@ -122,7 +172,7 @@ class BaseClient:
         self.workers = workers
         self.lock = threading.Lock()
         self.next_call = 0.0
-        
+
         self.session = requests.Session()
         retry = Retry(total=5, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
         self.session.mount("https://", HTTPAdapter(max_retries=retry))
@@ -172,13 +222,13 @@ class DoiClient(BaseClient):
         headers = {"Accept": "application/vnd.citationstyles.csl+json"}
         if self.settings.email:
             headers["User-Agent"] = f"QuartoRef/{__version__} (mailto:{self.settings.email})"
-        
+
         try:
             resp = self.session.get(url, headers=headers, timeout=self.settings.api_timeout, allow_redirects=True)
             if resp.status_code == 404:
                 return ArticleMetadata(prefix="doi", raw_id=raw_id, error="Not found", status_code=404)
             resp.raise_for_status()
-            
+
             try:
                 return ArticleMetadata(prefix="doi", raw_id=raw_id, csl_data=resp.json())
             except Exception:
@@ -363,11 +413,11 @@ def main() -> int:
         if full_id not in existing_bib or existing_bib[full_id].get("title", "").startswith("[Error]"):
             to_fetch.append((prefix, clean_id))
 
+    pm_client = PubMedClient(settings)
+    doi_client = DoiClient(settings)
+    
     if to_fetch:
-        pm_client = PubMedClient(settings)
-        doi_client = DoiClient(settings)
         results: list[ArticleMetadata] = []
-        
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             future_to_id = {}
             for prefix, clean_id in to_fetch:
@@ -377,23 +427,43 @@ def main() -> int:
             for future in concurrent.futures.as_completed(future_to_id):
                 results.append(future.result())
 
-        updated_count = 0
         for meta in results:
             if meta.is_valid or meta.status_code == 404:
                 existing_bib[meta.full_id] = meta.to_csl_json()
-                updated_count += 1
             else:
                 print(f"Warning: [{meta.full_id}] Fetch failed ({meta.error})")
                 existing_bib[meta.full_id] = meta.to_csl_json()
-                updated_count += 1
 
-        if updated_count > 0:
-            export_list = sorted(existing_bib.values(), key=lambda x: str(x.get("id", "")))
+    # 全てのエントリを最新の正規化ロジックで再正規化して保存
+    # (既存データに不正な形式が含まれている場合でもここで修正される)
+    normalized_bib = {fid: ArticleMetadata.from_existing(csl).to_csl_json() 
+                      for fid, csl in existing_bib.items()}
+    
+    # 実際に出力対象となるIDのみをフィルタリング (Markdown内で使われているものに限定したい場合はここで)
+    # 現状はキャッシュとして全て保存する方針を維持
+    
+    if normalized_bib:
+        # JSONが変更されたか、新規取得があった場合に書き出し
+        # 簡易的に件数と全データの比較を行う
+        export_list = sorted(normalized_bib.values(), key=lambda x: str(x.get("id", "")))
+        
+        # 既存のファイル内容と比較して変更がある場合のみ上書き
+        should_write = True
+        if bib_path.exists():
+            try:
+                with open(bib_path, "r", encoding="utf-8") as f:
+                    if json.load(f) == export_list:
+                        should_write = False
+            except Exception: pass
+            
+        if should_write:
             with open(bib_path, "w", encoding="utf-8") as f:
                 json.dump(export_list, f, ensure_ascii=False, indent=2)
             print(f"✓ Bibliography synced: {bib_filename} (Total: {len(export_list)})")
-    else:
-        if id_pairs: print("✓ All citations are already cached.")
+        else:
+            if id_pairs: print("✓ All citations are up to date.")
+    elif id_pairs:
+        print("Warning: No citation data available.")
 
     # 5. 書き出し
     if processed_text != original_text:
