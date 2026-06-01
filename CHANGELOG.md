@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-06-01
+
+### Added
+
+- **Bibliography Pruning**: The synchronization engine now automatically filters and removes (prunes) cached bibliography records from the generated CSL-JSON file if they are no longer actively cited in the manuscript, keeping the citation database clean.
+- **Verbose Diagnostic Mode**: Added a new `--verbose` CLI flag (enabled by default) that outputs real-time API fetch states (e.g. `[1/2] Fetching doi:10.1000/xyz... Success: ...`) and secure masked confirmation of loaded API keys.
+
+### Changed
+
+- **Safe Sequential Fetching**: Replaced the multi-threaded concurrent engine with a highly robust sequential, single-threaded fetch loop. Added a `1.0s` polite sleep delay between multiple API requests to safely avoid `429 Too Many Requests` rate limit flags on free tiers.
+- **Enhanced CSL Normalization**:
+  - Automatically translates Crossref and PubMed item types into standard CSL-JSON compatible fields (e.g. `journal-article` -> `article-journal`, `book-chapter` -> `chapter`, `proceedings-article` -> `paper-conference`).
+  - Cleans up journal short abbreviations (`container-title-short`) by stripping periods and trimming spaces (e.g. `Proc. Natl. Acad. Sci. U.S.A.` -> `Proc Natl Acad Sci USA`).
+  - Gracefully handles missing citation fields (e.g., automatically populates missing authors with `UNKNOWN AUTHOR`).
+  - Stores standard, valid error JSON structures for failed requests, preventing Quarto rendering failures while keeping diagnosis clear.
+- **Reduced Dependency Footprint**: Removed the `shutil`, `concurrent.futures`, and complex HTTP retry adapter configurations, rewriting backup and filesystem sync logic using standard library file operations for a lighter weight, maintenance-friendly design.
+
 ## [1.2.2] - 2026-05-10
 
 ### Added

@@ -1,4 +1,4 @@
-# 📘 QuartoRef (v1.2.2)
+# 📘 QuartoRef (v1.5.0)
 
 [English](#english) | [日本語](#日本語)
 
@@ -6,7 +6,7 @@
 
 ## English
 
-**QuartoRef** is a lightweight CLI tool designed for [Quarto](https://quarto.org/) users. It automatically organizes citations in your manuscripts (`.qmd` or `.md`), fetches the latest bibliographic metadata from [PubMed](https://pubmed.ncbi.nlm.nih.gov/) and [DOI](https://doi.org/) (via Crossref), generates [CSL-JSON](https://citeproc-js.readthedocs.io/en/latest/csl-json/markup.html) files, and even automates the retrieval of [CSL](https://citationstyles.org/) (Citation Style Language) styles.
+**QuartoRef** is a lightweight CLI tool designed for [Quarto](https://quarto.org/) users. It automatically organizes citations in your manuscripts (`.qmd` or `.md`), fetches the latest bibliographic metadata from [PubMed](https://pubmed.ncbi.nlm.nih.gov/) and [DOI](https://doi.org/), generates [CSL-JSON](https://citeproc-js.readthedocs.io/en/latest/csl-json/markup.html) files, and even automates the retrieval of [CSL](https://citationstyles.org/) (Citation Style Language) styles.
 
 By using [PMIDs](https://pubmed.ncbi.nlm.nih.gov/) and [DOIs](https://doi.org/) directly as citation keys, it completely eliminates the need for maintaining a local bibliography database or manually managing [CSL](https://citationstyles.org/) style files. Since the master data is centralized online, it also prevents citation inconsistencies during collaboration. The `.qmd` / `.md` workflow maintains high affinity with LLMs (Generative AI) while simplifying the synchronization of the latest bibliographic metadata—a process that was previously a bottleneck in research automation.
 
@@ -16,8 +16,8 @@ By using [PMIDs](https://pubmed.ncbi.nlm.nih.gov/) and [DOIs](https://doi.org/) 
 - **Smart Citation Merging**: Automatically merges consecutive tags (e.g., `[@pmid:1] [@pmid:2]` becomes `[@pmid:1; @pmid:2]`) and fixes accidental trailing punctuation or case issues.
 - **Zero-Configuration YAML Management**: The tool automatically registers the generated bibliography file in your YAML front matter.
 - **Automatic CSL Style Retrieval**: If a CSL style is specified in the YAML (e.g., `csl: nature.csl`) and the file is missing locally, it is automatically downloaded from the [official CSL repository](https://github.com/citation-style-language/styles).
+- **Polite Sequential Fetching**: Replaced complex multi-threaded concurrency with polite, sequential, single-threaded fetches separated by a `1.0s` sleep delay to safely avoid `429 Too Many Requests` limits on free API tiers.
 - **Fail-Safe Processing**: Even if a network error occurs or an ID is invalid, the tool generates a "placeholder" to ensure your Quarto document still renders without errors.
-- **Production Ready**: Optimized with thread-safe rate limiting and robust error handling.
 
 ### 📦 Installation
 
@@ -52,6 +52,7 @@ Citations must include the `pmid:` or `doi:` prefix:
 | `input_file`     | Target `.qmd` or `.md` file.                                     | (Menu selection) |
 | `--update-yaml`  | Toggle YAML registration (use `--no-update-yaml` to disable).    | (Enabled)        |
 | `--download-csl` | Toggle CSL style retrieval (use `--no-download-csl` to disable). | (Enabled)        |
+| `--verbose`      | Toggle real-time progress logging (use `--no-verbose` to disable).| (Enabled)        |
 
 #### Environment Variables (.env)
 
@@ -76,7 +77,7 @@ Once `QuartoRef` has organized your citations, render your document normally:
 
 ## 日本語
 
-**QuartoRef** は、[Quarto](https://quarto.org/) (`.qmd`) や [Markdown](https://daringfireball.net/projects/markdown/) (`.md`) 原稿内の引用タグを自動整理し、[PubMed](https://pubmed.ncbi.nlm.nih.gov/) および [DOI](https://doi.org/) (Crossref) から最新の書誌情報を取得して [CSL-JSON](https://citeproc-js.readthedocs.io/en/latest/csl-json/markup.html) を生成、さらに [CSL](https://citationstyles.org/) (Citation Style Language) スタイルの自動取得まで行う、軽量な CLI ツールです。
+**QuartoRef** は、[Quarto](https://quarto.org/) (`.qmd`) や [Markdown](https://daringfireball.net/projects/markdown/) (`.md`) 原稿内の引用タグを自動整理し、[PubMed](https://pubmed.ncbi.nlm.nih.gov/) および [DOI](https://doi.org/) から最新の書誌情報を取得して [CSL-JSON](https://citeproc-js.readthedocs.io/en/latest/csl-json/markup.html) を生成、さらに [CSL](https://citationstyles.org/) (Citation Style Language) スタイルの自動取得まで行う、軽量な CLI ツールです。
 
 [PMID](https://pubmed.ncbi.nlm.nih.gov/) や [DOI](https://doi.org/) をそのまま引用キーとして扱うことで、煩雑な文献データベース構築や [CSL](https://citationstyles.org/) スタイルの手動管理の手間を完全に排除しました。マスターデータがオンラインに集約されているため、共同執筆時における情報の不整合も発生しません。LLM（生成AI）との親和性を維持しつつ、これまで自動化のボトルネックであった「最新の書誌情報同期」を極めてシンプルに解決します。
 
@@ -86,8 +87,8 @@ Once `QuartoRef` has organized your citations, render your document normally:
 - **引用タグをスマートに統合**: 連続するタグの統合（`[@pmid:1] [@pmid:2]` → `[@pmid:1; @pmid:2]`）や、大文字小文字の乱れ、末尾の不要な句読点などを自動で修正します。
 - **YAML 設定もおまかせ**: 生成された文献ファイルを YAML フロントマターの `bibliography` に自動で登録。
 - **CSL スタイルの自動取得**: YAML で `csl: nature.csl` のように指定されておりローカルにファイルがない場合、[公式リポジトリ](https://github.com/citation-style-language/styles)から自動取得します。
+- **確実かつ安全な取得エンジン**: 従来の複雑な並列スレッド処理を廃止し、無料利用枠でも `429 Too Many Requests` エラーを起こさないよう、1秒の待機時間を設けた安全なシングルスレッド・シーケンシャル取得方式を採用。
 - **エラーに強い設計**: 万が一ネットワークエラーや ID の間違いがあっても、仮のデータを生成して Quarto のレンダリング（PDF/HTML作成）が止まらないように配慮します。
-- **プロフェッショナル仕様**: スレッドセーフなレート制限、詳細なエラーハンドリング、副作用を排した堅牢な設計。
 
 ### 📦 インストール
 
@@ -122,6 +123,7 @@ python QuartoRef.py
 | `input_file`     | 対象の原稿ファイル (`.qmd` / `.md`)。                                 | (メニュー選択) |
 | `--update-yaml`  | YAML フロントマターへの登録の切り替え (無効化は `--no-update-yaml`)。 | (有効)         |
 | `--download-csl` | CSL スタイルの自動取得の切り替え (無効化は `--no-download-csl`)。     | (有効)         |
+| `--verbose`      | 実行時の詳細ログ・進捗情報の表示切り替え (非表示にするには `--no-verbose`)。 | (有効)         |
 
 #### 環境変数による設定 (.env)
 
