@@ -1,4 +1,4 @@
-# 📘 QuartoRef (v1.5.0)
+# 📘 QuartoRef (v1.6.0)
 
 [English](#english) | [日本語](#日本語)
 

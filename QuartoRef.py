@@ -8,7 +8,7 @@ Description:
 """
 from __future__ import annotations
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"
 
 import argparse
 import io
@@ -135,6 +135,10 @@ def download_csl_style(style_name: str, repo_url: str) -> bool:
     return False
 
 def fetch_citation(prefix: str, raw_id: str, settings: Settings) -> ArticleMetadata:
+    import urllib.request
+    import urllib.parse
+    from urllib.error import HTTPError, URLError
+
     full_id = f"{prefix}:{raw_id}"
     headers = {"User-Agent": f"QuartoRef/{__version__} (mailto:{settings.email})"} if settings.email else {"User-Agent": f"QuartoRef/{__version__}"}
 
@@ -150,15 +154,22 @@ def fetch_citation(prefix: str, raw_id: str, settings: Settings) -> ArticleMetad
     else:
         return ArticleMetadata(full_id=full_id, error=f"Unsupported prefix: {prefix}", status_code=400)
 
-    # 共通の通信処理
+    # 共通の通信処理 (urllib を用いて WAF の TLS フィンガープリントによる 403 エラーを回避)
     try:
-        resp = requests.get(url, params=params, headers=headers, timeout=settings.api_timeout)
-        resp.raise_for_status()
-        return ArticleMetadata(full_id=full_id, csl_data=resp.json())
-    except requests.exceptions.RequestException as e:
-        status = e.response.status_code if e.response is not None else 500
+        query_string = urllib.parse.urlencode(params)
+        full_url = f"{url}?{query_string}"
+        req = urllib.request.Request(full_url, headers=headers)
+        with urllib.request.urlopen(req, timeout=settings.api_timeout) as response:
+            csl_data = json.loads(response.read().decode("utf-8"))
+            return ArticleMetadata(full_id=full_id, csl_data=csl_data)
+    except HTTPError as e:
+        status = e.code
         error_msg = "Not found" if status == 404 else str(e)
         return ArticleMetadata(full_id=full_id, error=error_msg, status_code=status)
+    except URLError as e:
+        return ArticleMetadata(full_id=full_id, error=str(e.reason), status_code=500)
+    except Exception as e:
+        return ArticleMetadata(full_id=full_id, error=str(e), status_code=500)
 
 # ==========================================
 # 📝 ドキュメント処理 (Core Logic)

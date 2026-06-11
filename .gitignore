@@ -13,3 +13,13 @@ tests/
 
 # Environment variables (Secrets)
 .env
+
+# Generated bibliographies and CSL styles
+*.json
+*.csl
+
+# Temporary backups
+*.bak
+
+# Prompt / local scratch files
+prompt.md
